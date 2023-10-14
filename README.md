@@ -1,6 +1,6 @@
 # AI-powered Auction Vehicle Damage Evaluator
 
-Source code for post, [Image Identification and Classification with Amazon Bedrock, OpenSearch, and OpenCLIP](https://garystafford.medium.com/image-identification-and-classification-with-amazon-bedrock-opensearch-and-openclip-5442baca1846). Build a generative AI-powered vehicle damage assessment application on AWS using Vector Engine for Amazon OpenSearch Serverless, AI21 Labs Foundation Models, and OpenCLIP.
+Source code for post, [Image Identification and Classification with Amazon Bedrock, OpenSearch, and OpenCLIP](https://garystafford.medium.com/image-identification-and-classification-with-amazon-bedrock-opensearch-and-openclip-5442baca1846). Build a generative AI-powered vehicle damage assessment application on AWS using Vector Engine for Amazon OpenSearch Serverless, AI21 Labs Foundation Models, and OpenCLIP. Read the blog post for complete instructions.
 
 ## Commands
 
