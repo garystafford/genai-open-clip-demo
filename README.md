@@ -33,9 +33,9 @@ streamlit run app.py \
     --client.toolbarMode "minimal"
 ```
 
-## Sample Vehicle VINs
+## Sample Vehicles
 
-Using the National Highway Traffic Safety Administration (NHTSA) vPIC API.
+You can use the following vehicle's VIN, color, mileage, and price to try out the application.
 
 ```txt
 VIN: 3MW5R1J00M8C08095
@@ -50,7 +50,7 @@ Description: Used 2021 BMW 3 Series 330e xDrive 2.0L 4-Cylinder 8-Speed Automati
 Color: Mineral Grey Metallic
 Mileage: 54001
 Price: USD 34433
-https://www.mcgovernauto.com/exotic-used/BMW/2021-BMW-3+Series-058a86b80a0e0a945926c74ee94f5183.htm
+Dealer link: https://www.mcgovernauto.com/exotic-used/BMW/2021-BMW-3+Series-058a86b80a0e0a945926c74ee94f5183.htm
 
 VIN: 3MW5R7J01L8B16026
 Description: Used 2020 BMW 330i xDrive Sedan
