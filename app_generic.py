@@ -31,8 +31,8 @@ stream_handler.setLevel(logging.DEBUG)
 stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
 
-
-AOSS_HOST = "lb57mvpduvhx9oxpw0eh.us-east-1.aoss.amazonaws.com"
+# *** CHANGE HOST NAME ***
+AOSS_HOST = "<your_host>.us-east-1.aoss.amazonaws.com"
 AOSS_REGION = "us-east-1"
 INDEX_NAME = "open-clip-vehicle-eval-index"
 
@@ -165,14 +165,13 @@ def main():
             "Yellow",
         ),
         help="Select the closest exterior color.",
-        index=5,
     )
 
     if color_option == "Choose a color...":
         st.warning("Please input the vehicle's exterior color before continuing.")
 
     mileage = st.number_input(
-        "Mileage:", value=57550, help="Input the current vehicle mileage."
+        "Mileage:", help="Input the current vehicle mileage."
     )
     if mileage == 0:
         st.warning("Please input the vehicle's mileage before continuing.")
