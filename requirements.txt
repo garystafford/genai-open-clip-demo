@@ -1,0 +1,12 @@
+boto3
+gTTS
+open_clip_torch
+opensearch-py
+pandas
+pillow
+requests
+streamlit
+torch
+
+# for mac
+watchdog

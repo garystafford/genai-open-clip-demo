@@ -1,0 +1,751 @@
+# GenAI on AWS: AI-powered Vehicle Damage Evaluator
+# Generic version using Open CLIP
+# Author: Gary A. Stafford
+# Date: 2023-09-17
+
+import hashlib
+import json
+import logging
+import os
+import sys
+import time
+from io import BytesIO
+
+import boto3
+import open_clip
+import pandas as pd
+import requests
+import streamlit as st
+import torch
+from PIL import Image, ImageEnhance
+from gtts import gTTS
+from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
+
+# logging configuration
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+# terminal logger
+stream_handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+stream_handler.setLevel(logging.DEBUG)
+stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
+
+
+AOSS_HOST = "lb57mvpduvhx9oxpw0eh.us-east-1.aoss.amazonaws.com"
+AOSS_REGION = "us-east-1"
+INDEX_NAME = "open-clip-vehicle-eval-index"
+
+
+def main():
+    st.set_page_config(
+        page_title="All-Star Auctions",
+        page_icon="logos/allstar.png",
+    )
+
+    streamlit_style = """
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap');
+
+
+                h4 :not(#ai-powered-vehicle-damage-evaluator):not(h2)  {
+                    font-family: 'Open Sans';
+                }
+            </style>
+            """
+    st.markdown(streamlit_style, unsafe_allow_html=True)
+
+    st.markdown(
+        """
+            <style>
+                    .block-container {
+                        padding-top: 12px;
+                        padding-bottom: 0px;
+                        padding-left: 0;
+                        padding-right: 0;
+                    }
+                    textarea[class^="st-"] {
+                        height: 250px;
+                    }
+                    .element-container img {
+                        background-color: #ffffff;
+                    }
+                    h2 {
+                        font-family: 'Open Sans';
+                        padding-top: 30px;
+                        font-size: 32px;
+                        font-weight: 600;
+                        letter-spacing: -0.03em;
+                    }
+                    #MainMenu {
+                        visibility: visible;
+                    }
+                    footer {
+                        visibility: hidden;
+                    }
+                    header {
+                        visibility: visible;
+                    }
+                    [data-testid="stForm"] {
+                        border: 0px
+                    }
+            </style>
+            """,
+        unsafe_allow_html=True,
+    )
+
+    if "vehicle_data" not in st.session_state:
+        st.session_state["vehicle_data"] = None
+    if "image_count" not in st.session_state:
+        st.session_state["image_count"] = 0
+    if "all_search_results" not in st.session_state:
+        st.session_state["all_search_results"] = []
+    if "total_damaged_images" not in st.session_state:
+        st.session_state["total_damaged_images"] = 0
+    if "total_devaluation" not in st.session_state:
+        st.session_state["total_devaluation"] = 0
+    if "uploaded_file_paths" not in st.session_state:
+        st.session_state["uploaded_file_paths"] = []
+    if "vehicle_description" not in st.session_state:
+        st.session_state["vehicle_description"] = ""
+    if "is_damaged" not in st.session_state:
+        st.session_state["is_damaged"] = None
+    if "length_results" not in st.session_state:
+        st.session_state["length_results"] = 0
+
+    client_bedrock = create_bedrock_connection()
+    client_opensearch = create_opensearch_connection()
+
+    title_container = st.container()
+    with title_container:
+        col1, col2 = st.columns([1, 4], gap="small")
+        with col1:
+            st.image("logos/all_star_auctions_v1.png")
+        with col2:
+            st.markdown("## AI-powered Vehicle Damage Evaluator")
+
+    vin_info_container = st.container()
+    with vin_info_container:
+        st.markdown(f"#### Vehicle Information")
+
+    vin = st.text_input(
+        "VIN:",
+        placeholder="e.g., 3MW5R1J00M8C08095",
+        help="Input the 17-character vehicle identification number (VIN)",
+        value="3MW5R1J00M8C08095",
+    )
+    if len(vin) == 17:
+        st.session_state["vehicle_data"] = get_vehicle_data_by_vin(vin)
+        with st.expander("Vehicle details"):
+            vehicle_data = st.session_state["vehicle_data"]
+            if vehicle_data is not None:
+                for i, (key, value) in enumerate(vehicle_data.items()):
+                    st.markdown(f"* __{key}:__ {value}")
+            st.markdown(" ")
+            st.markdown("_Data courtesy [NHTSA](https://vpic.nhtsa.dot.gov/)_")
+    else:
+        st.warning("Please input a valid VIN before continuing.")
+
+    color_option = st.selectbox(
+        "Exterior color:",
+        (
+            "Choose a color...",
+            "Black",
+            "Light blue",
+            "Brown",
+            "Gold",
+            "Gray",
+            "Green",
+            "Navy",
+            "Orange",
+            "Purple",
+            "Red",
+            "Silver",
+            "White",
+            "Yellow",
+        ),
+        help="Select the closest exterior color.",
+        index=5,
+    )
+
+    if color_option == "Choose a color...":
+        st.warning("Please input the vehicle's exterior color before continuing.")
+
+    mileage = st.number_input(
+        "Mileage:", value=57550, help="Input the current vehicle mileage."
+    )
+    if mileage == 0:
+        st.warning("Please input the vehicle's mileage before continuing.")
+
+    estimated_value = st.number_input(
+        "Initial auction estimate (USD) by Edmunds:",
+        value=34560,  # random.randrange(28200, 38600, 50),
+        help="Simulated vehicle value by www.edmunds.com",
+    )
+    if estimated_value == 0:
+        st.warning("Please input the vehicle's estimated value before continuing.")
+
+    image_uploader_container = st.container()
+    with image_uploader_container:
+        st.markdown("---")
+        st.markdown(f"#### Image Uploader")
+
+        uploaded_files = st.file_uploader(
+            "Choose (3) images", accept_multiple_files=True, type=["png", "jpeg", "jpg"]
+        )
+
+        with st.form(
+            "image_uploader",
+        ):
+            btn_result = st.form_submit_button("Process Images")
+            if btn_result:
+                if len(uploaded_files) == 3:
+                    uploaded_file_paths = []
+
+                    for uploaded_file in uploaded_files:
+                        image_file_new_name = save_image_file(uploaded_file)
+                        st.success(
+                            f"Saved File: {image_file_new_name} to uploaded_images"
+                        )
+                        image_path = f"uploaded_images/{image_file_new_name}"
+                        uploaded_file_paths.append(image_path)
+                st.session_state["uploaded_file_paths"] = uploaded_file_paths
+
+        if len(st.session_state.uploaded_file_paths) >= 3:
+            with st.expander("Uploaded image details..."):
+                st.markdown(f"__Original images__")
+                col1, col2, col3, _ = st.columns([1, 1, 1, 1], gap="medium")
+                with col1:
+                    st.image(
+                        st.session_state.uploaded_file_paths[-3],
+                        caption="Original image #1",
+                    )
+                with col2:
+                    st.image(
+                        st.session_state.uploaded_file_paths[-2],
+                        caption="Original image #2",
+                    )
+                with col3:
+                    st.image(
+                        st.session_state.uploaded_file_paths[-1],
+                        caption="Original image #3",
+                    )
+
+                st.markdown(f"__Enhanced images__")
+                col1, col2, col3, _ = st.columns([1, 1, 1, 1], gap="medium")
+                with col1:
+                    enhanced_image = image_enhancement(
+                        st.session_state.uploaded_file_paths[-3]
+                    )
+                    st.image(enhanced_image, caption="Enhanced version #1")
+                with col2:
+                    enhanced_image = image_enhancement(
+                        st.session_state.uploaded_file_paths[-2]
+                    )
+                    st.image(enhanced_image, caption="Enhanced version #2")
+                with col3:
+                    enhanced_image = image_enhancement(
+                        st.session_state.uploaded_file_paths[-1]
+                    )
+                    st.image(enhanced_image, caption="Enhanced version #3")
+
+    image_analysis_container = st.container()
+    with image_analysis_container:
+        with st.spinner(text="Performing image analysis..."):
+            all_search_results = []
+            if not st.session_state["all_search_results"]:
+                x = 0
+                for uploaded_file_path in st.session_state["uploaded_file_paths"][0:3]:
+                    # create embedding
+                    image_embedding = create_image_embedding(uploaded_file_path)
+                    # perform opensearch query of vector index
+                    results = query_opensearch(
+                        client_opensearch, INDEX_NAME, image_embedding
+                    )
+
+                    if results is None:
+                        st.error("Please authenticate before continuing")
+                        exit(1)
+                    x = x + 1
+                    plot_image_grid(results, x)
+                    calculate_probability_of_damage(results, False)
+                    all_search_results.append(results)
+                st.session_state["all_search_results"] = all_search_results
+            else:
+                x = 0
+                for results in st.session_state["all_search_results"]:
+                    x = x + 1
+                    plot_image_grid(results, x)
+                    calculate_probability_of_damage(results, True)
+                    # all_search_results.append(results)
+
+    final_analysis_container = st.container()
+    with final_analysis_container:
+        st.markdown("---")
+        st.markdown(f"#### 📊 Final Analysis")
+
+        vehicle_data = st.session_state["vehicle_data"]
+
+        # is engine a hybrid?
+        if vehicle_data is not None:
+            fuel_type = ""
+            if vehicle_data["FuelTypeSecondary"] is not None:
+                fuel_type = f"{vehicle_data['FuelTypePrimary']}-powered"
+            else:
+                fuel_type = f"Hybrid-powered ({vehicle_data['FuelTypePrimary']} {vehicle_data['FuelTypeSecondary']})"
+
+            details = [
+                f"__VIN:__ {vehicle_data['VIN']}",
+                f"__Year, make, and model:__ {vehicle_data['ModelYear']} {vehicle_data['Make']} {vehicle_data['Model']}",
+                f"__Series:__ {vehicle_data['Series']}",
+                f"__Body style:__ {vehicle_data['NCSABodyType']}",
+                f"__Drivetrain:__ {vehicle_data['DriveType']}",
+                f"__Engine-type:__ {float(vehicle_data['DisplacementL']):,.2f} liter, {vehicle_data['EngineCylinders']}-cylinder, {vehicle_data['EngineHP']} horsepower, {fuel_type.lower()}",
+                f"__Transmission:__ {vehicle_data['TransmissionSpeeds']}-speed {(vehicle_data['TransmissionStyle']).lower()}",
+                f"__Additional options:__ {'Unknown' if vehicle_data['Note'] == '' else vehicle_data['Note']}",
+                f"__Exterior color:__ {color_option}",
+                f"__Mileage:__ {mileage:,.0f}",
+                f"__Base price:__ ${0.00 if vehicle_data['BasePrice'] == '' else float(vehicle_data['BasePrice']):,.0f}",
+                f"__Initial auction estimate:__ ${estimated_value:,.0f}",
+                f"__Images showing damage:__ {st.session_state['total_damaged_images']} of 3",
+                f"__Recommended devaluation due to damage:__ {st.session_state['total_devaluation']:.0%}",
+                f"__Adjusted auction estimate:__ ${(1 - st.session_state['total_devaluation']) * estimated_value:,.0f}",
+            ]
+            for index, row in enumerate(details):
+                st.markdown(f"* {row}")
+
+    # for debugging and demo purposes
+    with st.sidebar:
+        st.markdown(f"### Debugging Information:")
+        st.markdown(f'__Vehicle data:__ {st.session_state["vehicle_data"]}')
+        st.markdown(f'__Image count:__ {st.session_state["image_count"]}')
+        st.markdown(
+            f'__Total damaged images:__ {st.session_state["total_damaged_images"]}'
+        )
+        st.markdown(f'__Total devaluation:__ {st.session_state["total_devaluation"]}')
+        st.markdown(
+            f'__Uploaded file paths:__ {st.session_state["uploaded_file_paths"]}'
+        )
+        st.markdown(
+            f'__Vehicle description:__ {st.session_state["vehicle_description"]}'
+        )
+        st.markdown(f'__Is damaged?:__ {st.session_state["is_damaged"]}')
+        st.markdown(f'__Length results:__ {st.session_state["length_results"]}')
+        st.markdown(f'__All search results:__ {st.session_state["all_search_results"]}')
+
+    description_container = st.container()
+    with description_container:
+        st.markdown(" ")
+        st.markdown("##### 🤖 AI-generated Auction Description")
+
+        with st.form("create_description"):
+            col1, col2, col3 = st.columns([3, 3, 3], gap="small")
+            with col1:
+                st.markdown("##")
+                style = st.toggle(
+                    "Auctioneer-style",
+                    help="Write the description in the style of a fast-talking auctioneer.",
+                )
+            with col2:
+                st.markdown("##")
+                language = st.toggle(
+                    "Spanish", help="Switch the description from English to Spanish."
+                )
+            with col3:
+                temperature = st.slider(
+                    "Degree of creativity*",
+                    min_value=0.0,
+                    max_value=0.5,
+                    value=0.0,
+                    step=0.1,
+                    help="CAUTION: More creativity means less accurate and factual.",
+                )
+
+            btn_result = st.form_submit_button("Create description")
+            if btn_result:
+                vehicle_description = create_summary(
+                    client_bedrock, details, style, language, temperature
+                )
+
+                st.session_state["vehicle_description"] = vehicle_description
+
+        vehicle_description = st.session_state["vehicle_description"]
+        if vehicle_description != "":
+            # with st.spinner(text="Creating AI-powered description..."):
+            st.text_area(
+                "Editable description:",
+                value=vehicle_description.strip().replace('"', ""),
+                height=100,
+                max_chars=2000,
+            )
+
+            if vehicle_description != "":
+                sound_file = BytesIO()
+                tts = gTTS(
+                    vehicle_description,
+                    lang="es" if language is True else "en",
+                    tld="es" if language is True else "us",
+                )
+                tts.write_to_fp(sound_file)
+                st.audio(sound_file)
+
+            with st.form("save_description"):
+                btn_result = st.form_submit_button("Save description")
+                if btn_result:
+                    save_final_analysis(
+                        vin,
+                        details,
+                        st.session_state["vehicle_description"],
+                        style,
+                        language,
+                        temperature,
+                    )
+
+
+# save uploaded image to local storage
+def save_image_file(image_file):
+    # https://www.geeksforgeeks.org/md5-hash-python/
+    hexadecimal = hashlib.md5(image_file.name.encode()).hexdigest()
+    suffix = image_file.name.split(".")[-1]
+    image_file_new_name = f"{hexadecimal}.{suffix}"
+
+    with open(os.path.join("uploaded_images", image_file_new_name), "wb") as f:
+        f.write(image_file.getbuffer())
+
+    return image_file_new_name
+
+
+# perform arbitrary image enhancement to improve knn semantic similarity search
+# TODO: look for auto-image enhancement library vs. manual enhancements
+def image_enhancement(image_path):
+    # reference: https://pillow.readthedocs.io/en/stable/reference/ImageEnhance.html#enhancement-factor
+    with open(image_path, "rb") as image_file:
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            image = Image.open(image_path)
+            enhancer = ImageEnhance.Color(image)
+            image = enhancer.enhance(1.3)
+            enhancer = ImageEnhance.Sharpness(image)
+            image = enhancer.enhance(1.3)
+            enhancer = ImageEnhance.Brightness(image)
+            image = enhancer.enhance(1.1)
+            enhancer = ImageEnhance.Contrast(image)
+            image = enhancer.enhance(1.1)
+
+            return image
+
+
+# create vector embedding of uploaded image on mac (cpu)
+def create_image_embedding(image_path):
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    logger.info(f"create_image_embedding: {image_path}")
+    model, _, preprocess = open_clip.create_model_and_transforms(
+        model_name="ViT-L-14",
+        pretrained="laion2b_s32b_b82k",
+        device=device,
+    )
+
+    image = preprocess(Image.open(image_path)).unsqueeze(0)
+
+    with torch.no_grad(), torch.autocast("cpu"):
+        image_features = model.encode_image(image)
+    return image_features.tolist()[0]
+
+
+# create summary of vehicle and damage using amazon bedrock llm
+# @st.cache_data
+def create_summary(_client_bedrock, details, style, language, temperature):
+    try:
+        if style:
+            # prompt template 1
+            prompt = "Write a description of the vehicle in the style of a fast-talking auctioneer using all the following information. DO NOT include the vehicle's condition in the description!\n"
+            for index, row in enumerate(details):
+                logger.debug(f"{index}: {row}")
+                if index in [0, 2, 10]:
+                    continue
+                if index == 8:
+                    prompt += f"- {row.replace('__', '').lower()}\n" ""
+                if index == 7 and "Unknown" in row:
+                    continue
+                if index == 4 and "/" in row:
+                    row = (
+                        row.replace("RWD/", "")
+                        .replace("AWD/", "")
+                        .replace("FWD/", "")
+                        .lower()
+                    )
+                    prompt += f"- {row.replace('__', '')}\n" ""
+                else:
+                    prompt += f"- {row.replace('__', '')}\n"
+
+            if language:
+                prompt += "\nWrite the description in Spanish. Use Spanish for the description."
+
+            body = json.dumps(
+                {
+                    "prompt": prompt,
+                    "maxTokens": 500,
+                    "temperature": temperature,
+                    "stopSequences": [],
+                }
+            )
+        else:
+            # prompt template 2
+            prompt = "Write an accurate description of the vehicle using all the following information. DO NOT include the vehicle's condition in the description!\n"
+
+            for index, row in enumerate(details):
+                logger.debug(f"{index}: {row}")
+                if index in [0, 2, 10]:
+                    continue
+                if index == 8:
+                    prompt += f"- {row.replace('__', '').lower()}\n" ""
+                if index == 7 and "Unknown" in row:
+                    continue
+                if index == 4 and "/" in row:
+                    row = (
+                        row.replace("RWD/", "")
+                        .replace("AWD/", "")
+                        .replace("FWD/", "")
+                        .lower()
+                    )
+                    prompt += f"- {row.replace('__', '')}\n" ""
+                else:
+                    prompt += f"- {row.replace('__', '')}\n"
+
+            prompt += "\nInclude a disclaimer at the end that the values stated are only an estimate and should be reviewed for accuracy by a qualified auctioneer."
+
+            if language:
+                prompt += "\nWrite the description in Spanish. Use Spanish for the description."
+
+            body = json.dumps(
+                {
+                    "prompt": prompt,
+                    "maxTokens": 500,
+                    "temperature": temperature,
+                    "stopSequences": [],
+                }
+            )
+
+        logger.debug(body)
+
+        model_id = "ai21.j2-ultra"
+        accept = "application/json"
+        content_type = "application/json"
+
+        response = _client_bedrock.invoke_model(
+            body=body, modelId=model_id, accept=accept, contentType=content_type
+        )
+        response_body = json.loads(response.get("body").read())
+        time.sleep(1)
+        logger.debug("ai21.j2-ultra called...")
+        return response_body["completions"][0]["data"]["text"]
+    except Exception as ex:
+        logger.error(ex)
+        return None
+
+
+# create bedrock client connection
+def create_bedrock_connection():
+    # boto3.set_stream_logger("", logging.ERROR)
+    client_bedrock = boto3.client("bedrock-runtime", "us-east-1")
+
+    return client_bedrock
+
+
+# create opensearch client connection
+def create_opensearch_connection():
+    host = AOSS_HOST
+    region = AOSS_REGION
+    service = "aoss"
+    credentials = boto3.Session().get_credentials()
+    auth = AWSV4SignerAuth(credentials, region, service)
+
+    client_opensearch = OpenSearch(
+        hosts=[{"host": host, "port": 443}],
+        http_auth=auth,
+        use_ssl=True,
+        verify_certs=True,
+        connection_class=RequestsHttpConnection,
+        pool_maxsize=20,
+    )
+
+    return client_opensearch
+
+
+# query opensearch using uploaded image embedding
+# @st.cache_data
+def query_opensearch(_client_opensearch, index_name, image_embedding):
+    query = {
+        "size": 10,
+        "_source": {"excludes": ["image_vector"]},
+        "query": {
+            "knn": {
+                "image_vector": {
+                    "vector": image_embedding,
+                    "k": 10,
+                }
+            }
+        },
+    }
+
+    try:
+        image_based_search_response = _client_opensearch.search(
+            body=query, index=index_name
+        )
+        logger.debug(json.dumps(image_based_search_response, indent=2))
+        return image_based_search_response
+    except Exception as ex:
+        logger.error(ex)
+
+
+# plot grid of images from opensearch knn results
+# @st.cache_resource
+def plot_image_grid(results, count):
+    # create pandas dataframe from result set
+    df_results = pd.DataFrame()
+    for hit in results["hits"]["hits"]:
+        new_row = {
+            "name": hit["_source"]["name"],
+            "description": hit["_source"]["description"],
+            "file_path": hit["_source"]["file_path"],
+            "severity": hit["_source"]["severity"],
+            "score": hit["_score"],
+        }
+        df_results = pd.concat([df_results, pd.DataFrame([new_row])], ignore_index=True)
+
+    df_results.columns = ["name", "description", "file_path", "severity", "score"]
+
+    st.markdown("---")
+    st.markdown(f"#### Damage Analysis: Image {count}")
+
+    # display 10 images and metadata in a 5x2 grid
+    grid = st.columns(5, gap="medium")
+    col = 0
+    for index, row in df_results.iterrows():
+        with grid[col]:
+            st.image(row["file_path"], caption="")
+            if row["severity"] == "none":
+                st.markdown(
+                    f"""
+                **Damage:** None  
+                **Severity:** None  
+                **Score:** {row['score']:.0%}  
+                ##"""
+                )
+            else:
+                st.markdown(
+                    f"""
+                **Damage:** {row['description'].replace("_", " ")}  
+                **Severity:** {row['severity']}  
+                **Score:** {row['score']:.0%}  
+                ##"""
+                )
+
+            col = (col + 1) % 5
+
+
+# performs arbitrary calculations to estimate damage devaluation
+# @st.cache_resource
+def calculate_probability_of_damage(results, noadd):
+    # damage severities: "none", "minor", "moderate", "severe"
+    severity_deval_prcnts = [0.0, 0.10, 0.25, 0.40]
+    threshold_value = 0.40
+
+    devaluation = 0
+    count_damaged = 0
+    score_sum_damaged = 0
+    count_undamaged = 0
+    score_sum_undamaged = 0
+
+    if not noadd:
+        for hit in results["hits"]["hits"]:
+            if hit["_source"]["severity"] == "none":
+                count_undamaged += 1
+                score_sum_undamaged += hit["_score"]
+            else:
+                count_damaged += 1
+                score_sum_damaged += hit["_score"]
+                if hit["_source"]["severity"] == "minor":
+                    devaluation += severity_deval_prcnts[1]
+                elif hit["_source"]["severity"] == "moderate":
+                    devaluation += severity_deval_prcnts[2]
+                else:
+                    devaluation += severity_deval_prcnts[3]
+
+        length_results = len(results["hits"]["hits"])
+        is_damaged = False
+        if (count_damaged / length_results) >= threshold_value:
+            is_damaged = True
+            st.session_state["total_damaged_images"] += 1
+        st.session_state["is_damaged"] = is_damaged
+        st.session_state["length_results"] = length_results
+
+    st.markdown(f" ")
+    st.markdown(f"##### Analysis Results")
+
+    st.session_state["image_count"] += 1
+    st.markdown(f"* __Query results returned:__ {st.session_state['length_results']}")
+    st.markdown(f"* __Threshold for damage:__ {threshold_value:.0%}")
+    st.markdown(
+        f"* __% of results showing damage:__ {(count_damaged / st.session_state['length_results']):.0%}"
+    )
+    st.markdown(
+        f"* __% of results showing no damage:__ {(count_undamaged / st.session_state['length_results']):.0%}"
+    )
+    st.markdown(
+        f"* __Relevance score of results showing damage:__ {score_sum_damaged:.2f}/10.00"
+    )
+    st.markdown(
+        f"* __Relevance score of results showing no damage:__ {score_sum_undamaged:.2f}/10.00"
+    )
+
+    st.markdown(f"* __Likelihood of damaged:__ {st.session_state['is_damaged']}")
+
+    if count_damaged > 0:
+        average_devaluation = devaluation / count_damaged
+        # logger.debug(devaluation, count_damaged, average_devaluation)
+        st.markdown(f"* __Suggested devaluation:__ {average_devaluation:.0%}")
+        st.session_state["total_devaluation"] += average_devaluation
+
+
+# call external api using vin to get vehicle data
+@st.cache_data
+def get_vehicle_data_by_vin(vin):
+    url = f"https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvaluesextended/{vin}?format=json"
+
+    response = requests.get(url)
+    response.raise_for_status()
+    json_response = response.json()
+
+    vehicle_data = json_response["Results"][0]
+    return vehicle_data
+
+
+# save final analysis to file named by vin
+def save_final_analysis(vin, details, summary, style, language, temperature):
+    details_tmp = {}
+
+    for detail in details:
+        detail = detail.replace("__", "").split(": ")
+        details_tmp[detail[0]] = detail[1]
+
+    details_tmp["Uploaded images"] = [
+        st.session_state.uploaded_file_paths[-3],
+        st.session_state.uploaded_file_paths[-2],
+        st.session_state.uploaded_file_paths[-1],
+    ]
+    details_tmp["Description"] = summary.strip()
+    details_tmp["Writing style"] = "Auctioneer" if style is True else "Standard"
+    details_tmp["Language"] = "Spanish" if language is True else "English"
+    details_tmp["Temperature"] = temperature
+
+    # serializing json
+    json_object = json.dumps(details_tmp, indent=4)
+
+    # writing to file
+    with open(f"saved_summaries/{vin}.json", "w") as outfile:
+        outfile.write(json_object)
+
+
+if __name__ == "__main__":
+    main()
