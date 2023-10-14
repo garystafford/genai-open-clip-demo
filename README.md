@@ -2,21 +2,26 @@
 
 Source code for post, [Image Identification and Classification with Amazon Bedrock, OpenSearch, and OpenCLIP](https://garystafford.medium.com/image-identification-and-classification-with-amazon-bedrock-opensearch-and-openclip-5442baca1846). Build a generative AI-powered vehicle damage assessment application on AWS using Vector Engine for Amazon OpenSearch Serverless, AI21 Labs Foundation Models, and OpenCLIP. Read the blog post for complete instructions.
 
+![Architecture](diagrams/Architecture_OpenCLIP.png)
+
 ## Commands
 
 ```shell
+# create virtual python environment
 python3 -m pip install virtualenv
 virtualenv car-damage
 python3 -m venv car-damage
 source car-damage/bin/activate
 
+# install required packages
 python3 -m pip install -r requirements.txt -Uq
 
-# set your aws credentials in the terminal if running locally or sagemaker studio
+# set your aws credentials in the terminal if running locally or in sagemaker studio
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
 export AWS_SESSION_TOKEN=...
 
+# start the streamlit app
 streamlit run app.py \
     --server.runOnSave true \
     --theme.base "light" \
