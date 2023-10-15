@@ -2,7 +2,7 @@
 
 Source code for post, [Image Identification and Classification with Amazon Bedrock, OpenSearch, and OpenCLIP](https://garystafford.medium.com/image-identification-and-classification-with-amazon-bedrock-opensearch-and-openclip-5442baca1846). Build a generative AI-powered vehicle damage assessment application on AWS using Vector Engine for Amazon OpenSearch Serverless, AI21 Labs Foundation Models, and OpenCLIP. Read the blog post for complete instructions. A video demonstration of the application is available on [YouTube](https://youtu.be/vkouFozFSvE?si=Rot0JVXZ2OMtPN_0).
 
-__NOTE:__ The vehicle image datasets are not included. You will need to download your choice of datasets and create embeddings. The damaged vehicle image database can be found on Roboflow Universe > CarDamagedDetection2 > Car-Damage-Type-Detection-End-Game: [Car-Damage-Type-Detection-End-Game Computer Vision Project](https://universe.roboflow.com/cardamageddetection2/car-damage-type-detection-end-game)
+__NOTE:__ The vehicle image datasets are not included. You will need to download your choice of datasets and create embeddings. The damaged vehicle image database can be found on Roboflow Universe > CarDamagedDetection2 > Car-Damage-Type-Detection-End-Game: [Car-Damage-Type-Detection-End-Game Computer Vision Project](https://universe.roboflow.com/cardamageddetection2/car-damage-type-detection-end-game). The undamaged vehicle image dataset can be downloaded from Kaggle > [Undamaged Vehicle Image Dataset](https://www.kaggle.com/datasets/garystafford/undamaged-vehicle-image-dataset).
 
 ## Architecture
 
