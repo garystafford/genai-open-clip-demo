@@ -63,3 +63,6 @@ Mileage: 26190
 Price: USD 33499
 Dealer link: https://www.vwpittsfield.com/used/BMW/2020-BMW-330i-b82ca94b0a0e094a74e2589da13cd025.htm
 ```
+
+---
+The contents of this repository represent my viewpoints and not of my past or current employers, including Amazon Web Services (AWS). All third-party libraries, modules, plugins, and SDKs are the property of their respective owners.
