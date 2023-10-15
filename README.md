@@ -4,7 +4,7 @@ Source code for post, [Image Identification and Classification with Amazon Bedro
 
 ## Architecture
 
-![Architecture](diagrams/Architecture_OpenCLIP.png)
+![Architecture](diagrams/Architecture_OpenCLIP_v2.png)
 
 ## Application Commands
 
