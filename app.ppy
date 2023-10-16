@@ -418,20 +418,20 @@ def save_image_file(image_file):
 # TODO: look for auto-image enhancement library vs. manual enhancements
 def image_enhancement(image_path):
     # reference: https://pillow.readthedocs.io/en/stable/reference/ImageEnhance.html#enhancement-factor
-    with open(image_path, "rb") as image_file:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            image = Image.open(image_path)
-            enhancer = ImageEnhance.Color(image)
-            image = enhancer.enhance(1.3)
-            enhancer = ImageEnhance.Sharpness(image)
-            image = enhancer.enhance(1.3)
-            enhancer = ImageEnhance.Brightness(image)
-            image = enhancer.enhance(1.1)
-            enhancer = ImageEnhance.Contrast(image)
-            image = enhancer.enhance(1.1)
+    with open(image_path, "rb"):
+        image = Image.open(image_path)
+        enhancer = ImageEnhance.Color(image)
+        image = enhancer.enhance(1.3)
+        enhancer = ImageEnhance.Sharpness(image)
+        image = enhancer.enhance(1.3)
+        enhancer = ImageEnhance.Brightness(image)
+        image = enhancer.enhance(1.0)
+        enhancer = ImageEnhance.Contrast(image)
+        image = enhancer.enhance(1.1)
+        # image = image.convert("L")
+        image.save(image_path)
 
-            return image
+        return image
 
 
 # create vector embedding of uploaded image on mac (cpu)
