@@ -48,6 +48,12 @@ streamlit run app.py \
 }
 ```
 
+## Example Generated Vehicle Description
+
+```text
+Ladies and gentlemen, we've got a great car for you here today - a 2021 BMW 330i! This 4-door sedan is a hardtop, with rear-wheel drive, a 2.00 liter, 4-cylinder engine with 255 horsepower, and an automatic transmission with 8 speeds. It's got some great options, including HD Radio, Bluetooth, Satellite Radio, Auxiliary Audio Input, and an MP3 player. The exterior is a beautiful gray, and it's got 57,550 miles on the odometer. The initial auction estimate is $34,560, but be sure to take a look at the images of the damage - they're going to recommend a devaluation of 93%, so we're going to adjust that to an auction estimate of $2,419. Happy bidding!
+```
+
 ## Sample Vehicles
 
 You can use the following vehicle's VIN, color, mileage, and price to try out the application.
