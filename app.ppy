@@ -32,8 +32,8 @@ stream_handler.setLevel(logging.DEBUG)
 stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
 
-
-AOSS_HOST = "lb57mvpduvhx9oxpw0eh.us-east-1.aoss.amazonaws.com"
+# ***** CHANGE HOST NAME BELOW *****
+AOSS_HOST = "<YOUR_HOST_NAME>.<YOUR_AWS_REGION>.aoss.amazonaws.com"
 AOSS_REGION = "us-east-1"
 INDEX_NAME = "open-clip-vehicle-eval-index"
 BEDROCK_MODEL_SUMMARIZATION = "ai21.j2-ultra-v1"
