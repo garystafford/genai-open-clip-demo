@@ -24,6 +24,7 @@ from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
 # logging configuration
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
 # terminal logger
 stream_handler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -35,6 +36,7 @@ logger.addHandler(stream_handler)
 AOSS_HOST = "lb57mvpduvhx9oxpw0eh.us-east-1.aoss.amazonaws.com"
 AOSS_REGION = "us-east-1"
 INDEX_NAME = "open-clip-vehicle-eval-index"
+BEDROCK_MODEL_SUMMARIZATION = "ai21.j2-ultra-v1"
 
 
 def main():
@@ -529,7 +531,7 @@ def create_summary(_client_bedrock, details, style, language, temperature):
 
         logger.debug(body)
 
-        model_id = "ai21.j2-ultra"
+        model_id = BEDROCK_MODEL_SUMMARIZATION
         accept = "application/json"
         content_type = "application/json"
 
@@ -538,7 +540,7 @@ def create_summary(_client_bedrock, details, style, language, temperature):
         )
         response_body = json.loads(response.get("body").read())
         time.sleep(1)
-        logger.debug("ai21.j2-ultra called...")
+        logger.debug(f"{BEDROCK_MODEL_SUMMARIZATION} called...")
         return response_body["completions"][0]["data"]["text"]
     except Exception as ex:
         logger.error(ex)
