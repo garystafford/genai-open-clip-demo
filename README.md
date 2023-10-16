@@ -37,6 +37,17 @@ streamlit run app.py \
     --client.toolbarMode "minimal"
 ```
 
+## Example Prompt Template
+
+```json
+{
+    "prompt": "Write a description of the vehicle in the style of a fast-talking auctioneer using all the following information. DO NOT include the vehicle's condition in the description!\n- Year, make, and model: 2021 BMW 330i\n- Body style: 4-door sedan, hardtop\n- drivetrain: rear-wheel drive\n- Engine-type: 2.00 liter, 4-cylinder, 255 horsepower, gasoline-powered\n- Transmission: 8-speed automatic\n- Additional options: HD Radio, Bluetooth, Satellite Radio, Auxiliary Audio Input, MP3 Player\n- exterior color: gray\n- Exterior color: Gray\n- Mileage: 57,550\n- Initial auction estimate: $34,560\n- Images showing damage: 3 of 3\n- Recommended devaluation due to damage: 93%\n- Adjusted auction estimate: $2,419\n",
+    "maxTokens": 500,
+    "temperature": 1.0,
+    "stopSequences": []
+}
+```
+
 ## Sample Vehicles
 
 You can use the following vehicle's VIN, color, mileage, and price to try out the application.
